@@ -1,0 +1,63 @@
+ARG BASE_IMAGE=ubuntu:focal
+FROM $BASE_IMAGE
+
+# update system
+RUN apt-get update && apt-get upgrade
+
+# core tools
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get install -y zsh sed make binutils build-essential diffutils gcc g++
+RUN apt-get install -y patch gzip bzip2 tar unzip
+RUN apt-get install -y perl cpio rsync file bc findutils
+RUN apt-get install -y wget curl
+RUN apt-get install -y mc htop
+
+# cross-compilation
+RUN apt-get install -y qemu-user qemu-user-binfmt
+RUN apt-get install -y libc6-armhf-cross libstdc++6-armhf-cross
+
+# dev-tools
+RUN apt-get install -y git git-lfs
+RUN apt-get install -y cmake ccache
+RUN apt-get install -y libclang-common-8-dev libasound2-dev yasm
+RUN apt-get install -y python python3 python3-pip python3-venv
+RUN pip3 install cython
+
+# JavaScript
+RUN apt-get -y install npm
+RUN curl -sL https://deb.nodesource.com/setup_14.x | bash -
+RUN apt-get -y install nodejs
+
+# cleanup
+RUN apt-get clean
+
+
+# prepare repos
+RUN apt-get install -y openssh-client
+RUN mkdir -p ~/.ssh && chmod 0700 ~/.ssh
+RUN ssh-keyscan github.com > ~/.ssh/known_hosts
+COPY certs/id_rsa /id_rsa
+RUN mv /id_rsa ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa
+COPY certs/id_rsa.pub /id_rsa.pub
+RUN mv /id_rsa.pub ~/.ssh/id_rsa.pub && chmod 600 ~/.ssh/id_rsa.pub
+
+RUN mkdir -p ~/work/projects
+WORKDIR ~/work/projects
+RUN git clone --recurse-submodules git@github.com:ajax-systems/vms.git
+RUN git clone --recurse-submodules git@github.com:ajax-systems/vms-firmware.git
+
+
+# ssh server for IDE
+RUN apt-get install -y openssh-server
+RUN ( \
+    echo 'LogLevel DEBUG2'; \
+    echo 'PermitRootLogin yes'; \
+    echo 'PasswordAuthentication yes'; \
+    echo 'Subsystem sftp /usr/lib/openssh/sftp-server'; \
+  ) > /etc/ssh/sshd_config_test_clion
+RUN mkdir /run/sshd
+
+WORKDIR /
+
+CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]
